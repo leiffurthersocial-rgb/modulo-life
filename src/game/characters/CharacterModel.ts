@@ -209,12 +209,20 @@ export class CharacterModel {
     if (appearance.glasses) {
       const frameMat = standard('#2b2b31', { roughness: 0.35, metalness: 0.3 });
       for (const side of [1, -1]) {
-        const rim = this.mesh(new THREE.TorusGeometry(0.042, 0.0075, 6, 14), frameMat, false);
-        rim.position.set(side * 0.053, 0.14, 0.126);
-        head.add(rim);
-        const lens = this.mesh(new THREE.CircleGeometry(0.04, 14), emissive('#cfe6f2', 0.22), false);
-        lens.position.set(side * 0.053, 0.14, 0.128);
+        // Square frames: a voxel face wants a voxel pair of glasses.
+        const lens = this.mesh(box(0.084, 0.07, 0.012), emissive('#cfe6f2', 0.3), false);
+        lens.position.set(side * 0.053, 0.14, 0.126);
         head.add(lens);
+        for (const [dx, dy, w, h] of [
+          [0, 0.04, 0.092, 0.012],
+          [0, -0.04, 0.092, 0.012],
+          [side * 0.046, 0, 0.012, 0.082],
+          [-side * 0.046, 0, 0.012, 0.082],
+        ] as const) {
+          const bar = this.mesh(box(w, h, 0.014), frameMat, false);
+          bar.position.set(side * 0.053 + dx, 0.14 + dy, 0.13);
+          head.add(bar);
+        }
       }
       const bridge = this.mesh(box(0.03, 0.007, 0.007), frameMat, false);
       bridge.position.set(0, 0.145, 0.128);
@@ -225,6 +233,16 @@ export class CharacterModel {
         head.add(arm);
       }
     }
+
+    // Blob shadow: cheap grounding that survives the low quality preset.
+    const blob = new THREE.Mesh(
+      new THREE.PlaneGeometry(0.62, 0.5),
+      new THREE.MeshBasicMaterial({ color: 0x000000, transparent: true, opacity: 0.15, depthWrite: false }),
+    );
+    blob.rotation.x = -Math.PI / 2;
+    blob.position.y = 0.02;
+    blob.renderOrder = -1;
+    root.add(blob);
 
     this.parts = {
       root,

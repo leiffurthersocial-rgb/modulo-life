@@ -1,4 +1,5 @@
 import * as THREE from 'three';
+import { voxColumn, voxSphere } from './voxel';
 
 /**
  * Every material and generated texture in the game is created through this
@@ -15,7 +16,7 @@ export function lambert(color: string | number, opts: { flat?: boolean; transpar
   if (hit) return hit as THREE.MeshLambertMaterial;
   const m = new THREE.MeshLambertMaterial({
     color,
-    flatShading: opts.flat ?? false,
+    flatShading: opts.flat ?? true,
     transparent: opts.transparent ?? (opts.opacity ?? 1) < 1,
     opacity: opts.opacity ?? 1,
   });
@@ -34,7 +35,7 @@ export function standard(
     color,
     roughness: opts.roughness ?? 0.8,
     metalness: opts.metalness ?? 0,
-    flatShading: opts.flat ?? false,
+    flatShading: opts.flat ?? true,
   });
   materialCache.set(key, m);
   return m;
@@ -91,22 +92,17 @@ export function box(w: number, h: number, d: number): THREE.BoxGeometry {
   return g;
 }
 
-export function cylinder(rt: number, rb: number, h: number, seg = 8): THREE.CylinderGeometry {
-  const key = `cyl:${rt}:${rb}:${h}:${seg}`;
-  const hit = geometryCache.get(key);
-  if (hit) return hit as THREE.CylinderGeometry;
-  const g = new THREE.CylinderGeometry(rt, rb, h, seg);
-  geometryCache.set(key, g);
-  return g;
+/**
+ * Kept for call-site compatibility: the whole game asks for "cylinders" and
+ * "spheres", and gets stepped cubes back. One redirect voxelises everything.
+ */
+export function cylinder(rt: number, rb: number, h: number, seg = 8): THREE.BufferGeometry {
+  return voxColumn(rt, rb, h, seg);
 }
 
-export function sphere(r: number, w = 12, h = 8): THREE.SphereGeometry {
-  const key = `sph:${r}:${w}:${h}`;
-  const hit = geometryCache.get(key);
-  if (hit) return hit as THREE.SphereGeometry;
-  const g = new THREE.SphereGeometry(r, w, h);
-  geometryCache.set(key, g);
-  return g;
+export function sphere(r: number, _w = 12, _h = 8): THREE.BufferGeometry {
+  // Small details stay a single cube; anything bigger becomes a cube cluster.
+  return voxSphere(r, r < 0.11 ? 0 : 1);
 }
 
 /* ------------------------------------------------------- generated textures */
@@ -237,30 +233,6 @@ export function petalTexture(): THREE.Texture | null {
   ctx.fill();
   const tex = new THREE.CanvasTexture(canvas);
   textureCache.set('petal', tex);
-  return tex;
-}
-
-/** Dappled canopy texture so tree crowns are not solid blobs. */
-export function blossomTexture(): THREE.Texture | null {
-  const hit = textureCache.get('blossom');
-  if (hit) return hit;
-  const made = makeCanvas(128, 128);
-  if (!made) return null;
-  const { canvas, ctx } = made;
-  ctx.fillStyle = '#f7c9d9';
-  ctx.fillRect(0, 0, 128, 128);
-  for (let i = 0; i < 260; i++) {
-    const shade = ['#ffe1ec', '#f0aec6', '#ffd0e0', '#e79ab6'][i % 4];
-    ctx.fillStyle = shade;
-    ctx.beginPath();
-    ctx.arc(Math.random() * 128, Math.random() * 128, 4 + Math.random() * 8, 0, Math.PI * 2);
-    ctx.fill();
-  }
-  const tex = new THREE.CanvasTexture(canvas);
-  tex.wrapS = THREE.RepeatWrapping;
-  tex.wrapT = THREE.RepeatWrapping;
-  tex.colorSpace = THREE.SRGBColorSpace;
-  textureCache.set('blossom', tex);
   return tex;
 }
 

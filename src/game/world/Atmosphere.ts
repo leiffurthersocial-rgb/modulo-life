@@ -34,7 +34,7 @@ const DAWN: Palette = {
   bottom: c('#f2b184'),
   fog: c('#d8b3a0'),
   sun: c('#ffd0a0'),
-  sunIntensity: 1.15,
+  sunIntensity: 1.35,
   ambient: c('#8a90b0'),
   ambientIntensity: 0.6,
   hemiSky: c('#9fb4d8'),
@@ -45,10 +45,10 @@ const DAY: Palette = {
   top: c('#5f9fd8'),
   bottom: c('#cfe6f2'),
   fog: c('#cfe0ea'),
-  sun: c('#fff3dc'),
-  sunIntensity: 1.85,
-  ambient: c('#bcd0e0'),
-  ambientIntensity: 0.72,
+  sun: c('#fff6e2'),
+  sunIntensity: 2.2,
+  ambient: c('#b4cadd'),
+  ambientIntensity: 0.58,
   hemiSky: c('#bcd8ee'),
   hemiGround: c('#94a07c'),
 };
@@ -58,7 +58,7 @@ const DUSK: Palette = {
   bottom: c('#eb8f5c'),
   fog: c('#b98a7e'),
   sun: c('#ffb072'),
-  sunIntensity: 1.0,
+  sunIntensity: 1.25,
   ambient: c('#7d7fa4'),
   ambientIntensity: 0.6,
   hemiSky: c('#8794c0'),
@@ -227,9 +227,9 @@ export class Atmosphere {
       const cloud = new THREE.Group();
       const blobs = 3 + Math.floor(Math.random() * 3);
       for (let b = 0; b < blobs; b++) {
-        const m = new THREE.Mesh(new THREE.SphereGeometry(6 + Math.random() * 5, 7, 5), mat);
+        const m = new THREE.Mesh(new THREE.BoxGeometry(10 + Math.random() * 9, 5, 8 + Math.random() * 6), mat);
         m.position.set((Math.random() - 0.5) * 20, (Math.random() - 0.5) * 3, (Math.random() - 0.5) * 12);
-        m.scale.y = 0.45;
+        m.scale.y = 0.7;
         cloud.add(m);
       }
       const a = (i / 12) * Math.PI * 2;

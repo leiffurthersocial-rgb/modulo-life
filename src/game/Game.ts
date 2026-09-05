@@ -269,6 +269,9 @@ export class Game {
       this.playerModel.update(dt, 0);
     }
 
+    // The rig only knows where to look because we hand it the player every
+    // frame - without this the camera stays anchored wherever it last reset.
+    this.camera.target.copy(this.player.position);
     this.camera.update(
       dt,
       this.input,

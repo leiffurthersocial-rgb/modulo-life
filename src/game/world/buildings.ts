@@ -242,7 +242,7 @@ function addRooftopUnit(group: THREE.Group, b: BuildingFootprint, mat: THREE.Mat
   const mast = new THREE.Mesh(cylinder(0.08, 0.08, 4, 6), lambert('#8c8f95'));
   mast.position.set(-3, b.height + 2.4, 2);
   group.add(mast);
-  const light = new THREE.Mesh(new THREE.SphereGeometry(0.16, 8, 6), emissive('#ff5a5a'));
+  const light = new THREE.Mesh(box(0.3, 0.3, 0.3), emissive('#ff5a5a'));
   light.position.set(-3, b.height + 4.4, 2);
   group.add(light);
 }

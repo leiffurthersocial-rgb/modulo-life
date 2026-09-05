@@ -5,8 +5,9 @@ neighbourhood in spring. Pick one of eight residents, and the other seven carry
 on living around you — working shifts, training, shopping, arguing about arcade
 scores, and going home when it gets dark.
 
-Everything you can see is generated from code at runtime. There are no
-third-party models, textures, fonts or audio files in this repository.
+Everything you can see is generated from code at runtime — a flat-shaded voxel
+neighbourhood built entirely out of cubes. There are no third-party models,
+textures, fonts or audio files in this repository.
 
 ---
 
@@ -108,6 +109,23 @@ sprint and the three combat actions.
 
 ---
 
+## Art direction
+
+The whole world is voxel: every building, tree, character, prop and boulder is
+assembled from boxes and rendered with flat shading, so faces read as crisp
+planes rather than smooth gradients.
+
+That is enforced at one choke point. `src/game/core/voxel.ts` builds merged
+cube clusters — blocky balls, stepped pyramids, cube rings, lumpy rocks — and
+the old `sphere()` / `cylinder()` helpers in the material cache simply return
+them. Props are still authored as "a cylinder here, a sphere there", and come
+out as cubes. Each shape is cached by its parameters, so a hundred identical
+tree canopies share one geometry.
+
+It is also cheaper than the smooth version it replaced: dropping generated
+textures in favour of flat colour brought the world down to ~230 draw batches
+and about 71k triangles.
+
 ## Architecture
 
 ```
@@ -155,6 +173,7 @@ Beyond that:
 - NPC animation only runs for characters within 45m, at half cadence to 95m,
   and not at all past that
 - Bloom is faked with additive sprites rather than a post-processing pass
+- Voxel shapes are merged once and cached, so repeated props cost one geometry
 - Textures are generated once into a cache and shared by every user of a colour
 - Interiors are built on entry and torn down on exit
 - Water and particles are skipped entirely when effects are off
@@ -233,6 +252,9 @@ continuing — with zero console errors.
   each other; they will occasionally clip shoulders on a narrow pavement.
 - Interiors are single rooms. The office is "floor 2" and the tower above it is
   scenery.
+- The world is flat. There is no terrain height or step handling, so raised
+  areas like the shrine terrace and the river bridge are deliberately built as
+  low kerbs rather than platforms you climb.
 - Combat is one-on-one only, and stages where the two characters happen to be
   standing rather than in a dedicated arena.
 - Home decoration places furniture into a list that grants its bonus; it does not

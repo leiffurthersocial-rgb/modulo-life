@@ -387,6 +387,9 @@ export function StrengthGame({ onClose }: { onClose: () => void }) {
 
 type FishPhase = 'idle' | 'waiting' | 'bite' | 'reeling' | 'done';
 
+/** Percent of the bar per second. Slow enough to read on a 30fps tablet. */
+const REEL_SPEED = 62;
+
 export function FishingGame({ spot, onClose }: { spot: string; onClose: () => void }) {
   const store = useGameStore();
   const ui = useUiStore();
@@ -395,6 +398,14 @@ export function FishingGame({ spot, onClose }: { spot: string; onClose: () => vo
   const [message, setMessage] = useState('Cast the line and wait for the float to dip.');
   const [cursor, setCursor] = useState(0);
   const [safeZone, setSafeZone] = useState({ start: 40, width: 20 });
+  /*
+   * The reel is judged against refs rather than state. The marker moves every
+   * frame, so a click handler closed over a render's `cursor` can be reading a
+   * value the player can no longer see; the ref is always what is on screen.
+   */
+  const cursorRef = useRef(0);
+  const safeRef = useRef({ start: 40, width: 20 });
+  const phaseRef = useRef<FishPhase>('idle');
   const timers = useRef<number[]>([]);
   const fishRef = useRef<ReturnType<typeof pickFish> | null>(null);
   const deadline = useRef(0);
@@ -413,19 +424,19 @@ export function FishingGame({ spot, onClose }: { spot: string; onClose: () => vo
     let dir = 1;
     const loop = (now: number) => {
       raf = requestAnimationFrame(loop);
-      const dt = (now - last) / 1000;
+      // Cap the step so a long frame cannot teleport the marker across the bar.
+      const dt = Math.min((now - last) / 1000, 0.05);
       last = now;
-      setCursor((c) => {
-        let next = c + dir * 95 * dt;
-        if (next > 100) {
-          next = 100;
-          dir = -1;
-        } else if (next < 0) {
-          next = 0;
-          dir = 1;
-        }
-        return next;
-      });
+      let next = cursorRef.current + dir * REEL_SPEED * dt;
+      if (next > 100) {
+        next = 100;
+        dir = -1;
+      } else if (next < 0) {
+        next = 0;
+        dir = 1;
+      }
+      cursorRef.current = next;
+      setCursor(next);
       if (now > deadline.current) {
         cancelAnimationFrame(raf);
         fail('The line goes slack. Whatever it was, it is gone.');
@@ -439,8 +450,13 @@ export function FishingGame({ spot, onClose }: { spot: string; onClose: () => vo
   if (!state) return null;
   const hasBait = state.inventory.some((s) => s.itemId === 'fishing_bait');
 
+  const enter = (next: FishPhase) => {
+    phaseRef.current = next;
+    setPhase(next);
+  };
+
   const fail = (text: string) => {
-    setPhase('done');
+    enter('done');
     setMessage(text);
     store.advanceTime(15, 0.9);
     audio.play('lose');
@@ -450,25 +466,19 @@ export function FishingGame({ spot, onClose }: { spot: string; onClose: () => vo
     const baited = hasBait;
     if (baited) store.take('fishing_bait', 1);
     fishRef.current = pickFish(spot, state.stats.luck, baited, Math.random);
-    setPhase('waiting');
+    enter('waiting');
     setMessage(baited ? 'Baited and cast. Now wait.' : 'Cast. No bait, so this could be a while.');
     audio.play('splash');
 
     const wait = 1200 + Math.random() * (baited ? 3200 : 5200);
     timers.current.push(
       window.setTimeout(() => {
-        setPhase('bite');
+        enter('bite');
         setMessage('The float dips — strike!');
         audio.play('blip');
         timers.current.push(
           window.setTimeout(() => {
-            setPhase((p) => {
-              if (p === 'bite') {
-                fail('Too slow. The float bobs back up, empty.');
-                return 'done';
-              }
-              return p;
-            });
+            if (phaseRef.current === 'bite') fail('Too slow. The float bobs back up, empty.');
           }, 1100),
         );
       }, wait),
@@ -476,26 +486,34 @@ export function FishingGame({ spot, onClose }: { spot: string; onClose: () => vo
   };
 
   const strike = () => {
-    if (phase !== 'bite') {
-      if (phase === 'waiting') fail('You yank at nothing. The fish scatter.');
+    if (phaseRef.current !== 'bite') {
+      if (phaseRef.current === 'waiting') fail('You yank at nothing. The fish scatter.');
       return;
     }
     const fish = fishRef.current;
     if (!fish) return;
     const window_ = reelWindow(fish.difficulty, state.stats);
     const width = clamp(34 - fish.difficulty * 22 + state.stats.discipline * 0.06, 8, 34);
-    setSafeZone({ start: 50 - width / 2 + (Math.random() - 0.5) * 24, width });
+    const zone = { start: clamp(50 - width / 2 + (Math.random() - 0.5) * 24, 2, 98 - width), width };
+    safeRef.current = zone;
+    setSafeZone(zone);
+    // Always start the marker from the left so the window is the same every
+    // cast, rather than resuming wherever the last attempt left it.
+    cursorRef.current = 0;
+    setCursor(0);
     deadline.current = performance.now() + window_ * 1000 + 1400;
-    setPhase('reeling');
+    enter('reeling');
     setMessage('Keep the tension — land the marker in the band.');
     audio.play('reel');
   };
 
   const hook = () => {
-    if (phase !== 'reeling') return;
+    if (phaseRef.current !== 'reeling') return;
     const fish = fishRef.current;
     if (!fish) return;
-    const inZone = cursor >= safeZone.start && cursor <= safeZone.start + safeZone.width;
+    const at = cursorRef.current;
+    const zone = safeRef.current;
+    const inZone = at >= zone.start && at <= zone.start + zone.width;
     if (!inZone) {
       fail('The line snaps taut and then goes limp. Lost it.');
       return;
@@ -510,7 +528,7 @@ export function FishingGame({ spot, onClose }: { spot: string; onClose: () => vo
       s.counters = { ...s.counters, fishCaught: s.counters.fishCaught + 1 };
     });
     store.discoverActivity('fishing');
-    setPhase('done');
+    enter('done');
     setMessage(`Landed it — ${def?.name ?? fish.itemId}!`);
     audio.play('win');
     ui.toast(`Caught ${def?.name}`, 'good', def?.icon);
@@ -531,9 +549,15 @@ export function FishingGame({ spot, onClose }: { spot: string; onClose: () => vo
           <button className="btn primary" onClick={hook}>
             Land it
           </button>
-        ) : (
+        ) : phase === 'bite' ? (
           <button className="btn primary" onClick={strike}>
-            Strike
+            Strike!
+          </button>
+        ) : (
+          // Still waiting: the button says so, but yanking early is still your
+          // call - and still scares the fish off.
+          <button className="btn" onClick={strike}>
+            Wait for the float to dip…
           </button>
         )
       }

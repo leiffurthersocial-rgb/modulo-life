@@ -2,7 +2,8 @@ import * as THREE from 'three';
 import { BUILDINGS, PLAZA_RADIUS, ROADS, WORLD_BOUNDS, type Road } from '@/data/world-layout';
 import { LOCATIONS } from '@/data/locations';
 import type { InteractionTarget } from '@/game/types';
-import { blossomTexture, emissive, lambert, pavementTexture, roadTexture } from '@/game/core/materials';
+import { emissive, lambert, pavementTexture, roadTexture } from '@/game/core/materials';
+import { voxRock } from '@/game/core/voxel';
 import { createBuilding } from './buildings';
 import { CollisionWorld } from './collision';
 import { mergeStatics } from './mergeStatics';
@@ -59,7 +60,7 @@ export function buildWorld(): BuiltWorld {
 
   /* ---------------------------------------------------------------- ground */
   const groundGeo = new THREE.PlaneGeometry(260, 230);
-  const ground = new THREE.Mesh(groundGeo, lambert('#7d9663'));
+  const ground = new THREE.Mesh(groundGeo, lambert('#7fa05f'));
   ground.rotation.x = -Math.PI / 2;
   ground.position.set(2, GROUND_Y - 0.02, 6);
   ground.receiveShadow = true;
@@ -141,19 +142,23 @@ export function buildWorld(): BuiltWorld {
       mat.map.repeat.set(6, 6);
       mat.map.needsUpdate = true;
     }
-    const disc = new THREE.Mesh(new THREE.CircleGeometry(PLAZA_RADIUS, 40), mat);
+    const disc = new THREE.Mesh(new THREE.CircleGeometry(PLAZA_RADIUS, 8), mat);
     disc.rotation.x = -Math.PI / 2;
     disc.position.y = GROUND_Y + 0.06;
     disc.receiveShadow = true;
     parent.add(disc);
 
-    const ring = new THREE.Mesh(new THREE.RingGeometry(PLAZA_RADIUS - 0.4, PLAZA_RADIUS, 40), lambert('#e2ddd0'));
+    const ring = new THREE.Mesh(new THREE.RingGeometry(PLAZA_RADIUS - 0.5, PLAZA_RADIUS, 8), lambert('#e2ddd0'));
     ring.rotation.x = -Math.PI / 2;
     ring.position.y = GROUND_Y + 0.07;
     parent.add(ring);
 
-    const island = new THREE.Mesh(new THREE.CylinderGeometry(5.4, 5.8, 0.4, 24), lambert('#8fa86e'));
-    island.position.y = GROUND_Y + 0.2;
+    const kerbRing = new THREE.Mesh(new THREE.BoxGeometry(11.8, 0.26, 11.8), lambert('#b8b2a6'));
+    kerbRing.position.y = GROUND_Y + 0.13;
+    kerbRing.receiveShadow = true;
+    parent.add(kerbRing);
+    const island = new THREE.Mesh(new THREE.BoxGeometry(10.6, 0.42, 10.6), lambert('#8fa86e'));
+    island.position.y = GROUND_Y + 0.26;
     island.receiveShadow = true;
     parent.add(island);
 
@@ -225,7 +230,7 @@ export function buildWorld(): BuiltWorld {
   /* ------------------------------------------------------------------ doors */
   for (const loc of LOCATIONS) {
     if (!loc.door || !loc.interior) continue;
-    const marker = new THREE.Mesh(new THREE.CircleGeometry(1.3, 18), emissive('#ffe6ae', 0.28));
+    const marker = new THREE.Mesh(new THREE.PlaneGeometry(2.4, 2.4), emissive('#ffe6ae', 0.26));
     marker.rotation.x = -Math.PI / 2;
     marker.position.set(loc.door.x, GROUND_Y + 0.09, loc.door.z);
     marker.userData.noMerge = true;
@@ -288,7 +293,6 @@ export function buildWorld(): BuiltWorld {
   }
 
   /* ----------------------------------------------------------- street trees */
-  const blossom = blossomTexture();
   const treeSpots: Array<[number, number, number, boolean]> = [];
   for (let x = -90; x <= 98; x += 13) {
     if (Math.abs(x) < PLAZA_RADIUS + 3) continue;
@@ -301,7 +305,7 @@ export function buildWorld(): BuiltWorld {
     treeSpots.push([8.6, z + 7, 0.8 + ((z * 2749) % 30) / 100, z % 30 === 0]);
   }
   for (const [x, z, s, pine] of treeSpots) {
-    const t = pine ? pineTree(s) : sakuraTree(s, blossom);
+    const t = pine ? pineTree(s) : sakuraTree(s);
     t.position.set(x, 0, z);
     t.rotation.y = (x + z) % 6.28;
     root.add(t);
@@ -408,13 +412,13 @@ export function buildWorld(): BuiltWorld {
   }
 
   /* -------------------------------------------------------------- the park */
-  const parkGrass = new THREE.Mesh(new THREE.PlaneGeometry(46, 28), lambert('#6f9455'));
+  const parkGrass = new THREE.Mesh(new THREE.PlaneGeometry(46, 28), lambert('#74a253'));
   parkGrass.rotation.x = -Math.PI / 2;
   parkGrass.position.set(-28, GROUND_Y + 0.02, 37);
   parkGrass.receiveShadow = true;
   root.add(parkGrass);
 
-  const pathRing = new THREE.Mesh(new THREE.RingGeometry(9.5, 11.2, 32), lambert('#c2b79c'));
+  const pathRing = new THREE.Mesh(new THREE.RingGeometry(9.5, 11.4, 12), lambert('#c2b79c'));
   pathRing.rotation.x = -Math.PI / 2;
   pathRing.position.set(-28, GROUND_Y + 0.04, 37);
   pathRing.scale.set(1.6, 1, 1);
@@ -427,27 +431,27 @@ export function buildWorld(): BuiltWorld {
   waters.push(pond);
   // You fish from the bank, not from inside the pond.
   collision.add({ x: -33, z: 39, halfW: 7.2, halfD: 4.8, id: 'pond' });
-  const pondRim = new THREE.Mesh(new THREE.RingGeometry(0, 1, 4), lambert('#9a9483'));
-  pondRim.visible = false;
-  root.add(pondRim);
   for (let i = 0; i < 14; i++) {
     const a = (i / 14) * Math.PI * 2;
-    const rock = new THREE.Mesh(new THREE.DodecahedronGeometry(0.4 + Math.random() * 0.3, 0), lambert('#8f8a7e'));
-    rock.position.set(-33 + Math.cos(a) * 7.9, 0.2, 39 + Math.sin(a) * 5.4);
-    rock.rotation.set(Math.random(), Math.random(), Math.random());
+    const rock = new THREE.Mesh(voxRock(0.42 + (i % 3) * 0.12, i + 1), lambert(i % 2 ? '#8f8a7e' : '#9c968a'));
+    rock.position.set(-33 + Math.cos(a) * 7.9, 0.28, 39 + Math.sin(a) * 5.4);
+    rock.rotation.y = (i * 1.7) % 6.28;
     root.add(rock);
   }
-  interactions.push({
-    id: 'fish:pond',
-    label: 'Fish in the pond',
-    icon: '🎣',
-    x: -33,
-    y: 0.6,
-    z: 44.6,
-    radius: 3,
-    kind: 'minigame',
-    data: { minigame: 'fishing', spot: 'pond' },
-  });
+  // Two spots, so the pond is fishable from whichever bank you arrive on.
+  for (const [i, [fx, fz]] of ([[-33, 44.6], [-24.4, 38.5]] as const).entries()) {
+    interactions.push({
+      id: `fish:pond:${i}`,
+      label: 'Fish in the pond',
+      icon: '🎣',
+      x: fx,
+      y: 0.6,
+      z: fz,
+      radius: 3,
+      kind: 'minigame',
+      data: { minigame: 'fishing', spot: 'pond' },
+    });
+  }
 
   for (const [x, z, rot] of [
     [-18, 32, Math.PI],
@@ -472,7 +476,7 @@ export function buildWorld(): BuiltWorld {
   }
   for (let i = 0; i < 10; i++) {
     const a = (i / 10) * Math.PI * 2;
-    const t = sakuraTree(0.9 + (i % 3) * 0.15, blossom);
+    const t = sakuraTree(0.9 + (i % 3) * 0.15);
     const x = -28 + Math.cos(a) * 19;
     const z = 37 + Math.sin(a) * 12;
     t.position.set(x, 0, z);
@@ -504,24 +508,33 @@ export function buildWorld(): BuiltWorld {
   river.userData.noMerge = true;
   root.add(river);
   waters.push(river);
+  // The crossing is at x = 0, so both the kerbs and the water leave a gap
+  // there. Everything stays low, because the player cannot step up.
+  const BRIDGE_HALF = 6;
   for (const s of [-1, 1]) {
-    const bank = new THREE.Mesh(new THREE.BoxGeometry(190, 1.2, 3), lambert('#a8a08e'));
-    bank.position.set(6, GROUND_Y + 0.3, 96 + s * 9);
-    bank.receiveShadow = true;
-    root.add(bank);
-    collision.add({ x: 6, z: 96 + s * 9, halfW: 95, halfD: 1.5, id: 'riverbank' });
+    for (const side of [-1, 1]) {
+      const span = 94;
+      const cx = side * (BRIDGE_HALF + span / 2);
+      const bank = new THREE.Mesh(new THREE.BoxGeometry(span, 0.55, 3), lambert('#a8a08e'));
+      bank.position.set(cx, GROUND_Y + 0.27, 96 + s * 9);
+      bank.receiveShadow = true;
+      root.add(bank);
+      collision.add({ x: cx, z: 96 + s * 9, halfW: span / 2, halfD: 1.5, id: 'riverbank' });
+    }
   }
-  // River water blocks movement on both sides of the bridge.
-  collision.add({ x: -44, z: 96, halfW: 51, halfD: 8, id: 'river-west' });
-  collision.add({ x: 56, z: 96, halfW: 45, halfD: 8, id: 'river-east' });
-  const bridge = new THREE.Mesh(new THREE.BoxGeometry(12, 0.5, 22), lambert('#b0a894'));
-  bridge.position.set(0, GROUND_Y + 0.9, 96);
+  for (const side of [-1, 1]) {
+    const span = 94;
+    collision.add({ x: side * (BRIDGE_HALF + span / 2), z: 96, halfW: span / 2, halfD: 8, id: 'river' });
+  }
+  const bridge = new THREE.Mesh(new THREE.BoxGeometry(BRIDGE_HALF * 2, 0.3, 24), lambert('#b0a894'));
+  bridge.position.set(0, GROUND_Y + 0.15, 96);
   bridge.receiveShadow = true;
   root.add(bridge);
   for (const s of [-1, 1]) {
-    const rail = new THREE.Mesh(new THREE.BoxGeometry(0.3, 1.1, 22), lambert('#8d8574'));
-    rail.position.set(s * 5.8, GROUND_Y + 1.6, 96);
+    const rail = new THREE.Mesh(new THREE.BoxGeometry(0.3, 1.0, 24), lambert('#8d8574'));
+    rail.position.set(s * (BRIDGE_HALF - 0.2), GROUND_Y + 0.8, 96);
     root.add(rail);
+    collision.add({ x: s * (BRIDGE_HALF - 0.2), z: 96, halfW: 0.25, halfD: 12, id: 'bridge-rail' });
   }
   interactions.push({
     id: 'fish:river',
@@ -535,7 +548,7 @@ export function buildWorld(): BuiltWorld {
     data: { minigame: 'fishing', spot: 'river' },
   });
   for (let x = -40; x <= 56; x += 16) {
-    const t = sakuraTree(1.0, blossom);
+    const t = sakuraTree(1.0);
     t.position.set(x, 0, 80);
     root.add(t);
     collision.add({ x, z: 80, halfW: 0.4, halfD: 0.4, id: 'tree' });
@@ -543,50 +556,54 @@ export function buildWorld(): BuiltWorld {
   }
 
   /* ---------------------------------------------------------------- shrine */
-  const shrineBase = new THREE.Mesh(new THREE.BoxGeometry(30, 1.6, 26), lambert('#8d9a72'));
-  shrineBase.position.set(100, GROUND_Y + 0.8, 22);
+  // The player has no vertical movement, so the shrine terrace is a low kerb
+  // rather than a raised platform - otherwise you arrive inside the stonework.
+  const TERRACE = 0.3;
+  const shrineBase = new THREE.Mesh(new THREE.BoxGeometry(30, TERRACE, 26), lambert('#a9a396'));
+  shrineBase.position.set(100, TERRACE / 2, 22);
   shrineBase.receiveShadow = true;
   root.add(shrineBase);
-  for (let i = 0; i < 6; i++) {
-    const step = new THREE.Mesh(new THREE.BoxGeometry(8, 0.28, 1.1), lambert('#b5b0a3'));
-    step.position.set(85 + i * 0.9, 0.14 + i * 0.28, 22);
+  for (let i = 0; i < 3; i++) {
+    const step = new THREE.Mesh(new THREE.BoxGeometry(1.4, 0.1, 9), lambert('#bdb8ab'));
+    step.position.set(84 + i * 1.4, 0.05 + i * 0.08, 22);
     root.add(step);
   }
   const gate = torii();
-  gate.position.set(82, 0, 22);
+  gate.position.set(80, 0, 22);
   gate.rotation.y = Math.PI / 2;
   root.add(gate);
   const hall = shrineHall();
-  hall.position.set(104, 1.6, 22);
+  hall.position.set(104, TERRACE, 22);
   hall.rotation.y = -Math.PI / 2;
   root.add(hall);
   collision.add({ x: 104, z: 22, halfW: 3.5, halfD: 4.5, id: 'shrine-hall' });
   const offering = offeringBox();
-  offering.position.set(98.5, 1.6, 22);
+  offering.position.set(98.5, TERRACE, 22);
   offering.rotation.y = Math.PI / 2;
   root.add(offering);
   interactions.push({
     id: 'shrine:offering',
     label: 'Make an offering',
     icon: '⛩️',
-    x: 97,
-    y: 1.6,
+    x: 96.6,
+    y: 1,
     z: 22,
-    radius: 2.6,
+    radius: 2.8,
     kind: 'activity',
     data: { activity: 'pray' },
   });
   for (let i = 0; i < 6; i++) {
-    for (const s of [-1, 1]) {
+    for (const side of [-1, 1]) {
       const l = stoneLantern();
-      l.group.position.set(90 + i * 3.4, 1.6, 22 + s * 5.5);
+      l.group.position.set(89 + i * 3.4, TERRACE, 22 + side * 6.2);
       root.add(l.group);
       nightLights.push(l.light);
+      collision.add({ x: 89 + i * 3.4, z: 22 + side * 6.2, halfW: 0.5, halfD: 0.5, id: 'lantern' });
     }
   }
   for (let i = 0; i < 5; i++) {
     const t = pineTree(1.1 + (i % 3) * 0.2);
-    t.position.set(96 + (i % 3) * 6, 1.6, 10 + (i % 2) * 24);
+    t.position.set(96 + (i % 3) * 6, TERRACE, 8 + (i % 2) * 27);
     root.add(t);
   }
 

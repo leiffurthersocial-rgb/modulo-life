@@ -1,6 +1,7 @@
 import * as THREE from 'three';
 import type { InteriorDefinition, InteractionTarget } from '@/game/types';
 import { box, cylinder, emissive, glass, lambert, sphere } from '@/game/core/materials';
+import { voxRing } from '@/game/core/voxel';
 import { CollisionWorld } from './collision';
 import { mergeStatics } from './mergeStatics';
 
@@ -578,7 +579,7 @@ function createProp(kind: string, def: InteriorDefinition): THREE.Object3D | nul
       break;
     case 'feltTable':
       add(cylinder(1.5, 1.5, 0.12, 20), lambert('#2f6b4a'), 0, 0.78);
-      add(new THREE.TorusGeometry(1.5, 0.09, 6, 24), darkWood, 0, 0.82, 0, [Math.PI / 2, 0, 0]);
+      add(voxRing(1.5, 0.1, 14), darkWood, 0, 0.82, 0, [Math.PI / 2, 0, 0]);
       add(cylinder(0.16, 0.3, 0.76, 8), darkWood, 0, 0.38);
       add(cylinder(0.7, 0.7, 0.06, 12), dark, 0, 0.03);
       for (let i = 0; i < 4; i++) add(box(0.16, 0.02, 0.24), lambert('#f0ece0'), -0.5 + i * 0.34, 0.86, 0.5);

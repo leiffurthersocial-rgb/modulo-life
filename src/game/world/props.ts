@@ -1,5 +1,6 @@
 import * as THREE from 'three';
 import { box, cylinder, emissive, glass, glowTexture, lambert, sphere } from '@/game/core/materials';
+import { voxRing } from '@/game/core/voxel';
 
 /** A light source that should switch on at dusk. */
 export interface NightLight {
@@ -153,7 +154,7 @@ export function mailbox(): THREE.Group {
 
 export function bicycle(color = '#3f7d8c'): THREE.Group {
   const g = new THREE.Group();
-  const wheelGeo = new THREE.TorusGeometry(0.32, 0.045, 6, 14);
+  const wheelGeo = voxRing(0.32, 0.05, 10);
   const wheelMat = lambert('#2a2a2e');
   for (const z of [-0.5, 0.5]) {
     const w = new THREE.Mesh(wheelGeo, wheelMat);
@@ -184,7 +185,7 @@ export function bikeRack(count = 4): THREE.Group {
   const g = new THREE.Group();
   const colors = ['#3f7d8c', '#a8563f', '#4a5f8c', '#5d7a4a', '#8c5d7a'];
   for (let i = 0; i < count; i++) {
-    const hoop = new THREE.Mesh(new THREE.TorusGeometry(0.35, 0.035, 5, 10, Math.PI), lambert('#8f959b'));
+    const hoop = new THREE.Mesh(voxRing(0.35, 0.04, 8), lambert('#8f959b'));
     hoop.position.set(i * 0.9 - (count - 1) * 0.45, 0.35, 0);
     g.add(hoop);
     if (i % 2 === 0) {
@@ -241,40 +242,61 @@ export function bush(scale = 1): THREE.Group {
   return g;
 }
 
-/** Sakura tree. `bare` swaps blossom for foliage on the non-flowering trees. */
-export function sakuraTree(scale = 1, blossomTex: THREE.Texture | null, bare = false): THREE.Group {
+/**
+ * Voxel sakura. Flat colour blocks rather than a texture: at this size a
+ * repeating canopy texture turns to mush, while three flat pinks read as
+ * blossom from right across the street.
+ */
+export function sakuraTree(scale = 1, _blossomTex: THREE.Texture | null = null, bare = false): THREE.Group {
   const g = new THREE.Group();
-  const trunk = new THREE.Mesh(cylinder(0.16, 0.3, 2.6, 7), lambert('#6b5344'));
-  trunk.position.y = 1.3;
-  trunk.castShadow = true;
-  g.add(trunk);
 
-  const crownMat = bare
-    ? lambert('#5f8f4c')
-    : new THREE.MeshLambertMaterial({ map: blossomTex ?? undefined, color: blossomTex ? '#ffffff' : '#f2b8ce' });
-
-  const blobs: Array<[number, number, number, number]> = [
-    [0, 3.3, 0, 1.5],
-    [1.0, 2.9, 0.4, 1.05],
-    [-0.9, 3.0, -0.4, 1.0],
-    [0.3, 3.9, -0.8, 0.9],
-    [-0.4, 3.7, 0.8, 0.85],
+  const barkDark = lambert('#5b4436');
+  const barkLight = lambert('#6e5342');
+  // Trunk as three stacked blocks, stepping in as it rises.
+  const trunkParts: Array<[number, number, number, THREE.Material]> = [
+    [0.66, 1.2, 0.6, barkDark],
+    [0.54, 1.1, 0.54, barkLight],
+    [0.44, 0.9, 0.44, barkDark],
   ];
-  for (const [x, y, z, r] of blobs) {
-    const blob = new THREE.Mesh(sphere(r, 9, 7), crownMat);
-    blob.position.set(x, y, z);
-    blob.scale.y = 0.82;
-    blob.castShadow = true;
-    g.add(blob);
+  let y = 0;
+  for (const [w, h, d, mat] of trunkParts) {
+    const m = new THREE.Mesh(box(w, h, d), mat);
+    m.position.y = y + h / 2;
+    m.castShadow = true;
+    g.add(m);
+    y += h;
   }
-  for (let i = 0; i < 3; i++) {
-    const branch = new THREE.Mesh(cylinder(0.06, 0.1, 1.5, 5), lambert('#6b5344'));
-    const a = (i / 3) * Math.PI * 2;
-    branch.position.set(Math.cos(a) * 0.55, 2.7, Math.sin(a) * 0.55);
-    branch.rotation.z = Math.cos(a) * -0.6;
-    branch.rotation.x = Math.sin(a) * 0.6;
+  for (const [bx, bz] of [[0.55, 0.2], [-0.5, -0.35]] as const) {
+    const branch = new THREE.Mesh(box(0.3, 0.3, 0.3), barkLight);
+    branch.position.set(bx, y - 0.35, bz);
     g.add(branch);
   }
+
+  const shades = bare
+    ? [lambert('#588f45'), lambert('#69a455'), lambert('#4a7d3b')]
+    : [lambert('#f6b3cd'), lambert('#ffd4e4'), lambert('#e493b4')];
+
+  // A deliberate cluster: outer ring, inner ring, cap, and two low outliers.
+  const canopy: Array<[number, number, number, number]> = [];
+  for (let i = 0; i < 8; i++) {
+    const a = (i / 8) * Math.PI * 2;
+    canopy.push([Math.cos(a) * 1.15, y + 0.35, Math.sin(a) * 1.15, 1.15]);
+  }
+  for (let i = 0; i < 4; i++) {
+    const a = (i / 4) * Math.PI * 2 + 0.4;
+    canopy.push([Math.cos(a) * 0.78, y + 1.05, Math.sin(a) * 0.78, 1.0]);
+  }
+  canopy.push([0, y + 1.55, 0, 0.9]);
+  canopy.push([1.45, y - 0.15, 0.35, 0.85]);
+  canopy.push([-1.3, y - 0.1, -0.5, 0.9]);
+
+  canopy.forEach(([cx, cy, cz, size], i) => {
+    const m = new THREE.Mesh(box(size, size * 0.92, size), shades[i % shades.length]);
+    m.position.set(cx, cy, cz);
+    m.castShadow = true;
+    g.add(m);
+  });
+
   g.scale.setScalar(scale);
   return g;
 }
@@ -401,7 +423,7 @@ export function clockTower(): { group: THREE.Group; light: NightLight } {
   head.castShadow = true;
   g.add(head);
   for (const [ax, az] of [[0, 1], [0, -1], [1, 0], [-1, 0]] as const) {
-    const face = new THREE.Mesh(new THREE.CircleGeometry(0.8, 20), emissive('#fff6e0'));
+    const face = new THREE.Mesh(box(1.5, 1.5, 0.06), emissive('#fff6e0'));
     face.position.set(ax * 1.07, 8.1, az * 1.07);
     face.rotation.y = ax !== 0 ? (ax > 0 ? Math.PI / 2 : -Math.PI / 2) : az > 0 ? 0 : Math.PI;
     g.add(face);
