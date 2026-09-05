@@ -69,6 +69,8 @@ const PROP_FOOTPRINTS: Record<string, [number, number]> = {
 
 export function buildInterior(def: InteriorDefinition): BuiltInterior {
   const scene = new THREE.Scene();
+  // Without this the renderer's clear colour shows as "sky" above the walls.
+  scene.background = new THREE.Color(def.wallColor).multiplyScalar(0.22);
   const root = new THREE.Group();
   scene.add(root);
   const collision = new CollisionWorld();
@@ -138,14 +140,14 @@ export function buildInterior(def: InteriorDefinition): BuiltInterior {
   }
 
   /* -------------------------------------------------------------- lights */
-  scene.add(new THREE.AmbientLight(new THREE.Color(def.lightColor), 0.55 * def.lightIntensity));
+  scene.add(new THREE.AmbientLight(new THREE.Color(def.lightColor), 0.42 + 0.5 * def.lightIntensity));
   const hemi = new THREE.HemisphereLight(new THREE.Color(def.lightColor), new THREE.Color(def.floorColor), 0.4);
   scene.add(hemi);
 
   const lampCount = w > 10 ? 3 : 2;
   for (let i = 0; i < lampCount; i++) {
     const x = (i / (lampCount - 1) - 0.5) * (w * 1.2);
-    const light = new THREE.PointLight(new THREE.Color(def.lightColor), def.lightIntensity * 12, 26, 1.6);
+    const light = new THREE.PointLight(new THREE.Color(def.lightColor), def.lightIntensity * 16, 34, 1.15);
     light.position.set(x, h - 0.45, 0);
     scene.add(light);
     if (def.id === 'int_arcade' || def.id === 'int_basement') animatedLights.push(light);
@@ -202,8 +204,10 @@ export function buildInterior(def: InteriorDefinition): BuiltInterior {
     icon: '🚪',
     x: def.exit.x,
     y: 1,
-    z: def.exit.z - 0.4,
-    radius: 2.2,
+    z: def.exit.z - 0.5,
+    // Wide enough to cover the spot you arrive on, so you can always turn round
+    // and walk straight back out.
+    radius: 2.8,
     kind: 'exit',
     data: { location: def.location },
   });

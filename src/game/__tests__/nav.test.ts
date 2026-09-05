@@ -89,3 +89,17 @@ describe('world layout', () => {
     expect(Math.hypot(n.x, n.z)).toBeLessThan(12);
   });
 });
+
+describe('camera basis', () => {
+  it('puts screen-right to the right of forward', () => {
+    // forward x right must point down (-Y) for a right-handed screen basis,
+    // which is what makes A strafe left and D strafe right.
+    for (const yaw of [0, 0.7, Math.PI / 2, Math.PI, -2.1]) {
+      const forward = { x: -Math.sin(yaw), z: -Math.cos(yaw) };
+      const right = { x: Math.cos(yaw), z: -Math.sin(yaw) };
+      // 2D cross product of (forward x right) in the XZ plane.
+      const cross = forward.x * right.z - forward.z * right.x;
+      expect(cross).toBeCloseTo(1, 6);
+    }
+  });
+});

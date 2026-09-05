@@ -268,7 +268,10 @@ function createSign(b: BuildingFootprint): THREE.Object3D | null {
   const nx = Math.sin(b.facing);
   const nz = Math.cos(b.facing);
   const depth = b.halfD * Math.abs(nz) + b.halfW * Math.abs(nx);
-  const width = Math.min((b.halfW * Math.abs(nz) + b.halfD * Math.abs(nx)) * 2 - 1, 12);
+  // Signs are sized off the facade rather than fixed, and capped so a wide
+  // building does not end up with a billboard.
+  const facade = (b.halfW * Math.abs(nz) + b.halfD * Math.abs(nx)) * 2;
+  const width = Math.min(facade * 0.62, 8.2);
 
   const mat = new THREE.MeshBasicMaterial({ map: tex, transparent: false });
   const plane = new THREE.Mesh(new THREE.PlaneGeometry(width, width / 4), mat);

@@ -124,8 +124,8 @@ export const LOCATIONS: LocationDefinition[] = [
     id: 'park',
     name: 'Hinode Park',
     kind: 'park',
-    x: -28,
-    z: 37,
+    x: -16,
+    z: 32,
     openHours: [0, 24],
     mapIcon: '🌳',
     description: 'Sakura, a pond full of carp, and a jogging loop.',
@@ -239,7 +239,8 @@ export function approachPoint(id: string): { x: number; z: number } {
   const loc = LOCATION_MAP[id];
   if (!loc) return { x: 0, z: 0 };
   if (loc.door) {
-    return { x: loc.door.x + Math.sin(loc.door.facing) * 3, z: loc.door.z + Math.cos(loc.door.facing) * 3 };
+    // Two metres out: clear of the wall, still inside the door's prompt radius.
+    return { x: loc.door.x + Math.sin(loc.door.facing) * 2, z: loc.door.z + Math.cos(loc.door.facing) * 2 };
   }
   return { x: loc.x, z: loc.z };
 }

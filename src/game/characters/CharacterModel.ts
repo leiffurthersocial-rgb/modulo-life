@@ -254,7 +254,7 @@ export class CharacterModel {
 
   /** Silhouette is the main way players tell characters apart at distance. */
   private buildHair(head: THREE.Group, mat: THREE.Material, a: Appearance): void {
-    const cap = this.mesh(sphere(0.146, 14, 10), mat, true);
+    const cap = this.mesh(sphere(0.142, 14, 10), mat, true);
     cap.scale.set(1, 1.06, 1);
     cap.position.y = 0.145;
     head.add(cap);
@@ -299,13 +299,13 @@ export class CharacterModel {
         break;
       }
       case 'mod': {
-        const sweep = this.mesh(box(0.27, 0.09, 0.13), mat, true);
+        const sweep = this.mesh(box(0.255, 0.085, 0.125), mat, true);
         sweep.position.set(0, 0.215, 0.045);
         sweep.rotation.x = -0.1;
         head.add(sweep);
         for (const s of [1, -1]) {
-          const sides = this.mesh(box(0.055, 0.19, 0.19), mat, true);
-          sides.position.set(s * 0.135, 0.115, -0.01);
+          const sides = this.mesh(box(0.046, 0.175, 0.17), mat, true);
+          sides.position.set(s * 0.132, 0.115, -0.01);
           head.add(sides);
         }
         const nape = this.mesh(box(0.22, 0.09, 0.07), mat, true);

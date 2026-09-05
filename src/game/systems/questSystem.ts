@@ -36,19 +36,47 @@ export function activeQuests(state: GameState): QuestDefinition[] {
 }
 
 /**
- * Recomputes progress for a quest from live game state. Deliver and collect
- * quests read the inventory directly, the rest use counters incremented by
- * gameplay events.
+ * The flag key holding the counter value a quest started from, so "earn 20,000
+ * yen" means twenty thousand more than you had when you took the job on.
  */
-export function computeProgress(state: GameState, q: QuestDefinition): number {
-  const p = questProgress(state, q.id);
-  switch (q.objective.kind) {
+export function baselineKey(questId: string): string {
+  return `qbase:${questId}`;
+}
+
+/** Counter a quest objective is measured against, before its baseline. */
+export function rawCounter(state: GameState, q: QuestDefinition): number {
+  const o = q.objective;
+  switch (o.kind) {
     case 'deliver':
     case 'collect':
-      return countItem(state.inventory, q.objective.target);
+      return countItem(state.inventory, o.target);
+    case 'earn':
+      return state.counters.earned;
+    case 'talk':
+      return state.counters.talkedToday.length;
+    case 'win':
+      return o.target.startsWith('fight_')
+        ? (state.flags[`fightwin:${o.target.slice(6)}`] ?? 0)
+        : (state.minigames[o.target]?.wins ?? 0);
+    case 'visit':
+      return o.target === 'study' ? state.counters.studySessions : (state.flags[`visit:${o.target}`] ?? 0);
     default:
-      return p.progress;
+      return 0;
   }
+}
+
+/**
+ * Progress is always derived from live game state rather than stored, so it
+ * cannot drift out of sync with what the player has actually done.
+ */
+export function computeProgress(state: GameState, q: QuestDefinition): number {
+  const raw = rawCounter(state, q);
+  const o = q.objective;
+  // Inventory and daily objectives are absolute; the rest are relative to the
+  // moment the quest was accepted.
+  if (o.kind === 'deliver' || o.kind === 'collect' || o.kind === 'talk') return raw;
+  const base = state.flags[baselineKey(q.id)] ?? 0;
+  return Math.max(0, raw - base);
 }
 
 export function canTurnIn(state: GameState, q: QuestDefinition): boolean {

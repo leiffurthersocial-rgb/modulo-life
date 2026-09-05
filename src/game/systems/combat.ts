@@ -73,7 +73,7 @@ const ACTION_RECOVERY: Record<string, number> = {
 };
 
 export function maxHpFor(stats: Stats): number {
-  return Math.round(58 + stats.stamina * 0.72 + stats.strength * 0.3);
+  return Math.round(70 + stats.stamina * 0.8 + stats.strength * 0.32);
 }
 
 export function maxStaminaFor(stats: Stats): number {
@@ -137,7 +137,8 @@ export function attackDamage(
   const defense = defender.stamina * 0.22 + defender.strength * 0.16;
   const critChance = 0.03 + attacker.luck / 480 - defender.luck / 1600;
   const crit = roll > 1 - Math.max(0.01, critChance);
-  let dmg = power * typeMul * variance * 0.34 - defense * 0.22;
+  // Tuned so a even match runs 30-90 seconds rather than three exchanges.
+  let dmg = power * typeMul * variance * 0.29 - defense * 0.22;
   if (crit) dmg *= 1.75;
   return { damage: Math.max(2, Math.round(dmg)), crit };
 }
@@ -232,7 +233,7 @@ function resolveStrike(state: CombatState, attacker: 'player' | 'foe', heavy: bo
     text: crit ? `${atk.name} lands a clean counter! (${final})` : `${atk.name} connects (${final})`,
   });
 
-  const knockdownThreshold = def.maxHp * (heavy ? 0.14 : 0.2);
+  const knockdownThreshold = def.maxHp * (heavy ? 0.2 : 0.27);
   if (final >= knockdownThreshold || (crit && heavy)) {
     def.action = 'down';
     def.actionTimer = 1.25;
@@ -240,7 +241,7 @@ function resolveStrike(state: CombatState, attacker: 'player' | 'foe', heavy: bo
     def.resolved = true;
     def.knockdowns += 1;
     push(state, { kind: 'knockdown', by: attacker, text: `${def.name} goes down!` });
-  } else if (final >= def.maxHp * 0.09) {
+  } else if (final >= def.maxHp * 0.12) {
     def.action = 'stagger';
     def.actionTimer = 0.4;
     def.resolved = true;

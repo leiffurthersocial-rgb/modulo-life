@@ -23,10 +23,10 @@ const NIGHT: Palette = {
   fog: c('#141b31'),
   sun: c('#8fa6d8'),
   sunIntensity: 0.16,
-  ambient: c('#3a4670'),
-  ambientIntensity: 0.5,
-  hemiSky: c('#222c50'),
-  hemiGround: c('#141826'),
+  ambient: c('#4d5a90'),
+  ambientIntensity: 0.78,
+  hemiSky: c('#2e3a66'),
+  hemiGround: c('#1c2130'),
 };
 
 const DAWN: Palette = {
@@ -110,7 +110,7 @@ export class Atmosphere {
   private stars: THREE.Points | null = null;
   private clouds: THREE.Group = new THREE.Group();
 
-  private rain: THREE.Points | null = null;
+  private rain: THREE.LineSegments | null = null;
   private rainVel: Float32Array | null = null;
   private petals: THREE.Points | null = null;
   private petalData: Float32Array | null = null;
@@ -282,25 +282,34 @@ export class Atmosphere {
     const budget = this.options.reducedParticles ? 0.35 : 1;
 
     if (this.weather === 'rain') {
-      const count = Math.floor(1800 * budget);
-      const pos = new Float32Array(count * 3);
+      // Drawn as short falling line segments rather than points: a dot of rain
+      // reads as dust, a streak reads as rain.
+      const count = Math.floor(2600 * budget);
+      const pos = new Float32Array(count * 6);
       const vel = new Float32Array(count);
       for (let i = 0; i < count; i++) {
-        pos[i * 3] = (Math.random() - 0.5) * 90;
-        pos[i * 3 + 1] = Math.random() * 40;
-        pos[i * 3 + 2] = (Math.random() - 0.5) * 90;
-        vel[i] = 28 + Math.random() * 16;
+        const x = (Math.random() - 0.5) * 64;
+        const y = Math.random() * 34;
+        const z = (Math.random() - 0.5) * 64;
+        const len = 0.55 + Math.random() * 0.5;
+        pos[i * 6] = x;
+        pos[i * 6 + 1] = y;
+        pos[i * 6 + 2] = z;
+        pos[i * 6 + 3] = x + 0.09;
+        pos[i * 6 + 4] = y - len;
+        pos[i * 6 + 5] = z;
+        vel[i] = 30 + Math.random() * 18;
       }
       const geo = new THREE.BufferGeometry();
       geo.setAttribute('position', new THREE.BufferAttribute(pos, 3));
-      const mat = new THREE.PointsMaterial({
-        color: '#bcd4e6',
-        size: 0.18,
+      const mat = new THREE.LineBasicMaterial({
+        color: '#cfe0ee',
         transparent: true,
-        opacity: 0.62,
+        opacity: 0.42,
         depthWrite: false,
+        fog: false,
       });
-      this.rain = new THREE.Points(geo, mat);
+      this.rain = new THREE.LineSegments(geo, mat);
       this.rain.frustumCulled = false;
       this.group.add(this.rain);
       this.rainVel = vel;
@@ -349,30 +358,31 @@ export class Atmosphere {
     let a: Palette;
     let b: Palette;
     let t: number;
-    if (h < 5) {
+    if (h < 4.5) {
       a = NIGHT;
       b = NIGHT;
       t = 0;
-    } else if (h < 7.5) {
+    } else if (h < 6.3) {
       a = NIGHT;
       b = DAWN;
-      t = (h - 5) / 2.5;
-    } else if (h < 10) {
+      t = (h - 4.5) / 1.8;
+    } else if (h < 8.2) {
+      // Dawn is over well before the shops open; by eight it is simply morning.
       a = DAWN;
       b = DAY;
-      t = (h - 7.5) / 2.5;
-    } else if (h < 16) {
+      t = (h - 6.3) / 1.9;
+    } else if (h < 16.5) {
       a = DAY;
       b = DAY;
       t = 0;
-    } else if (h < 18.5) {
+    } else if (h < 18.6) {
       a = DAY;
       b = DUSK;
-      t = (h - 16) / 2.5;
-    } else if (h < 20.5) {
+      t = (h - 16.5) / 2.1;
+    } else if (h < 20.3) {
       a = DUSK;
       b = NIGHT;
-      t = (h - 18.5) / 2;
+      t = (h - 18.6) / 1.7;
     } else {
       a = NIGHT;
       b = NIGHT;
@@ -391,8 +401,8 @@ export class Atmosphere {
     let dim = 1;
     let desat = 0;
     if (this.weather === 'rain') {
-      dim = 0.55;
-      desat = 0.55;
+      dim = 0.42;
+      desat = 0.68;
     } else if (this.weather === 'cloudy') {
       dim = 0.78;
       desat = 0.3;
@@ -419,7 +429,7 @@ export class Atmosphere {
     this.ambient.intensity = ambientIntensity * (this.weather === 'rain' ? 1.15 : 1);
     this.hemi.color.copy(grey(a.hemiSky.clone().lerp(b.hemiSky, t)));
     this.hemi.groundColor.copy(a.hemiGround.clone().lerp(b.hemiGround, t));
-    this.hemi.intensity = 0.4 + day * 0.3;
+    this.hemi.intensity = 0.5 + day * 0.25;
 
     // Sun arc: rises in the east, sets in the west.
     const sunAngle = ((h - 6) / 12) * Math.PI;
@@ -472,13 +482,26 @@ export class Atmosphere {
     if (this.rain && this.rainVel) {
       const pos = this.rain.geometry.attributes.position as THREE.BufferAttribute;
       const arr = pos.array as Float32Array;
-      for (let i = 0; i < arr.length / 3; i++) {
-        arr[i * 3 + 1] -= this.rainVel[i] * dt;
-        arr[i * 3] += dt * 3.5;
-        if (arr[i * 3 + 1] < -2) {
-          arr[i * 3] = focus.x + (Math.random() - 0.5) * 90;
-          arr[i * 3 + 1] = 34 + Math.random() * 8;
-          arr[i * 3 + 2] = focus.z + (Math.random() - 0.5) * 90;
+      const drops = this.rainVel.length;
+      for (let i = 0; i < drops; i++) {
+        const drop = this.rainVel[i] * dt;
+        const drift = dt * 3.2;
+        const head = i * 6;
+        arr[head + 1] -= drop;
+        arr[head + 4] -= drop;
+        arr[head] += drift;
+        arr[head + 3] += drift;
+        if (arr[head + 1] < -1) {
+          const x = focus.x + (Math.random() - 0.5) * 64;
+          const y = 28 + Math.random() * 10;
+          const z = focus.z + (Math.random() - 0.5) * 64;
+          const len = 0.55 + Math.random() * 0.5;
+          arr[head] = x;
+          arr[head + 1] = y;
+          arr[head + 2] = z;
+          arr[head + 3] = x + 0.09;
+          arr[head + 4] = y - len;
+          arr[head + 5] = z;
         }
       }
       pos.needsUpdate = true;

@@ -51,6 +51,9 @@ export class NpcAgent {
   private targetLocation = '';
   private activity: ActivityKind = 'home';
   private idleWobble = Math.random() * 10;
+  /** Fixed personal offset from a destination's anchor point. */
+  private readonly spreadX: number;
+  private readonly spreadZ: number;
   private animSpeed = 0;
   visible = true;
   inside: string | null = null;
@@ -65,6 +68,15 @@ export class NpcAgent {
     this.inside = runtime.inside;
     this.targetLocation = runtime.target;
     this.model.group.position.copy(this.position);
+
+    // Deterministic from the id so the same person always stands in the same
+    // relative spot rather than jittering between sessions.
+    let hash = 0;
+    for (let i = 0; i < id.length; i++) hash = (hash * 31 + id.charCodeAt(i)) & 0xffff;
+    const angle = (hash / 0xffff) * Math.PI * 2;
+    const radius = 1.1 + (hash % 7) * 0.28;
+    this.spreadX = Math.cos(angle) * radius;
+    this.spreadZ = Math.sin(angle) * radius;
   }
 
   get definition() {
@@ -110,7 +122,10 @@ export class NpcAgent {
 
     const loc = getLocation(this.targetLocation);
     if (!loc) return;
-    const goal = approachPoint(this.targetLocation);
+    // Each NPC stands on their own spot around a destination, so a gym at 6am
+    // is three people in a loose group rather than three people in one body.
+    const base = approachPoint(this.targetLocation);
+    const goal = { x: base.x + this.spreadX, z: base.z + this.spreadZ };
     const distToGoal = Math.hypot(this.position.x - goal.x, this.position.z - goal.z);
 
     if (distToGoal < ARRIVE_RADIUS) {
@@ -249,6 +264,11 @@ export class NpcAgent {
       }
     }
     this.model.update(dt, this.animSpeed);
+  }
+
+  /** Applies this agent's personal offset to a destination anchor. */
+  spreadAround(point: { x: number; z: number }): { x: number; z: number } {
+    return { x: point.x + this.spreadX, z: point.z + this.spreadZ };
   }
 
   setVisible(v: boolean): void {
@@ -397,7 +417,7 @@ export class NpcManager {
     for (const agent of this.agents.values()) {
       const block = agent.scheduleFor(hour);
       const loc = isOpen(block.location, hour) ? block.location : agent.definition.home;
-      const spot = approachPoint(loc);
+      const spot = agent.spreadAround(approachPoint(loc));
       agent.position.set(spot.x, 0, spot.z);
       agent.model.group.position.copy(agent.position);
       const def = requireLocation(loc);

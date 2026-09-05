@@ -425,6 +425,8 @@ export function buildWorld(): BuiltWorld {
   pond.userData.noMerge = true;
   root.add(pond);
   waters.push(pond);
+  // You fish from the bank, not from inside the pond.
+  collision.add({ x: -33, z: 39, halfW: 7.2, halfD: 4.8, id: 'pond' });
   const pondRim = new THREE.Mesh(new THREE.RingGeometry(0, 1, 4), lambert('#9a9483'));
   pondRim.visible = false;
   root.add(pondRim);
@@ -509,6 +511,9 @@ export function buildWorld(): BuiltWorld {
     root.add(bank);
     collision.add({ x: 6, z: 96 + s * 9, halfW: 95, halfD: 1.5, id: 'riverbank' });
   }
+  // River water blocks movement on both sides of the bridge.
+  collision.add({ x: -44, z: 96, halfW: 51, halfD: 8, id: 'river-west' });
+  collision.add({ x: 56, z: 96, halfW: 45, halfD: 8, id: 'river-east' });
   const bridge = new THREE.Mesh(new THREE.BoxGeometry(12, 0.5, 22), lambert('#b0a894'));
   bridge.position.set(0, GROUND_Y + 0.9, 96);
   bridge.receiveShadow = true;

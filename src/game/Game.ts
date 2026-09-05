@@ -7,7 +7,7 @@ import { approachPoint, getLocation, isOpen, LOCATIONS } from '@/data/locations'
 import { Engine } from './core/Engine';
 import { InputManager } from './core/Input';
 import { effectiveSettings, type Settings } from './core/settings';
-import { CharacterModel } from './characters/CharacterModel';
+import { CharacterModel, type AnimState } from './characters/CharacterModel';
 import { CameraRig } from './player/CameraRig';
 import { PlayerController, PLAYER_RADIUS } from './player/PlayerController';
 import { Atmosphere } from './world/Atmosphere';
@@ -35,6 +35,8 @@ export class Game {
   private atmosphere: Atmosphere;
   private exteriorScene = new THREE.Scene();
   private playerModel: CharacterModel;
+  /** Follows the player so they never dissolve into the night. */
+  private playerLight = new THREE.PointLight(0xffe6c4, 0, 15, 1.9);
   private player: PlayerController;
   private npcs: NpcManager;
 
@@ -48,6 +50,9 @@ export class Game {
   private paused = false;
   private disposed = false;
   private lockedTo: string | null = null;
+  private combatFoe: string | null = null;
+  /** Open-air locations the player is currently standing in, for visit counts. */
+  private insideAreas = new Set<string>();
   private settings: Settings;
   private lastAmbience: Ambience = 'none';
   private uiFpsTimer = 0;
@@ -76,6 +81,8 @@ export class Game {
 
     const def = getCharacter(state.playerId);
     this.playerModel = new CharacterModel(def.appearance);
+    this.playerLight.position.set(0, 1.7, 0);
+    this.playerModel.group.add(this.playerLight);
     this.exteriorScene.add(this.playerModel.group);
 
     this.player = new PlayerController(this.playerModel, {
@@ -195,11 +202,18 @@ export class Game {
     }
     this.npcs.placeInInterior(interiorId, spots);
 
-    this.player.teleport(def.spawn.x, def.spawn.z, Math.PI);
+    // Step a little further in than the doormat, so the camera has room behind
+    // the player and the exit prompt does not fire the moment you arrive.
+    this.player.teleport(def.spawn.x, def.spawn.z - 1.2, Math.PI);
     this.player.jumpEnabled = false;
-    this.camera.reset(this.player.position, Math.PI);
+    this.camera.reset(this.player.position, 0, 0.42);
 
-    useGameStore.getState().setPose({ inside: interiorId, x: def.spawn.x, z: def.spawn.z });
+    const homeLoc = getLocation(def.location);
+    useGameStore.getState().setPose({
+      inside: interiorId,
+      x: homeLoc?.x ?? this.player.position.x,
+      z: homeLoc?.z ?? this.player.position.z,
+    });
     if (playSound) audio.play('door');
   }
 
@@ -255,18 +269,38 @@ export class Game {
       this.playerModel.update(dt, 0);
     }
 
-    this.camera.update(dt, this.input, collision, !!this.interior);
+    this.camera.update(
+      dt,
+      this.input,
+      collision,
+      !!this.interior,
+      this.interior
+        ? {
+            width: this.interior.definition.width,
+            depth: this.interior.definition.depth,
+            height: this.interior.definition.height,
+          }
+        : null,
+    );
 
-    this.npcs.update({
-      state,
-      collision: this.world.collision,
-      playerPos: this.player.position,
-      playerInterior: this.interiorId,
-      dt: this.paused ? 0 : dt,
-      lockedTo: this.lockedTo,
-    });
+    if (this.combatFoe) {
+      // While fighting, the models are posed by the combat panel, not the AI.
+      const agent = this.npcs.get(this.combatFoe);
+      agent?.model.update(dt, 0);
+    } else {
+      this.npcs.update({
+        state,
+        collision: this.world.collision,
+        playerPos: this.player.position,
+        playerInterior: this.interiorId,
+        dt: this.paused ? 0 : dt,
+        lockedTo: this.lockedTo,
+      });
+    }
 
     this.atmosphere.update(this.paused ? 0 : dt, state.time, this.player.position, this.exteriorScene);
+    // Interiors have their own lighting, so the fill is outdoors-only.
+    this.playerLight.intensity = this.interior ? 0 : this.atmosphere.night * 6;
 
     if (!this.paused && this.settings.graphics.effects) {
       this.waterTime += dt;
@@ -281,11 +315,15 @@ export class Game {
 
     this.updateInteractions(state);
     this.updateAmbience(state);
+    if (!this.paused) this.trackVisits();
 
     if (!this.paused) {
+      // Indoors the controller works in room-local space, so the position the
+      // rest of the game sees (map pin, saves) is the building's own.
+      const here = this.interiorId ? getLocation(getInterior(this.interiorId)?.location ?? '') : null;
       useGameStore.getState().setPose({
-        x: this.player.position.x,
-        z: this.player.position.z,
+        x: here ? here.x : this.player.position.x,
+        z: here ? here.z : this.player.position.z,
         facing: this.player.facing,
       });
     }
@@ -326,6 +364,27 @@ export class Game {
 
     const weather = useGameStore.getState().state?.weather;
     if (weather && weather !== this.atmosphere.getWeather()) this.atmosphere.setWeather(weather);
+  }
+
+  /**
+   * Counts arrivals at the open-air places that have no door to walk through,
+   * which is what "meet me at the park bench" style tasks measure.
+   */
+  private trackVisits(): void {
+    if (this.interior) return;
+    for (const loc of LOCATIONS) {
+      if (loc.interior || loc.kind === 'home') continue;
+      const d = Math.hypot(this.player.position.x - loc.x, this.player.position.z - loc.z);
+      if (d < 22 && !this.insideAreas.has(loc.id)) {
+        this.insideAreas.add(loc.id);
+        const key = `visit:${loc.id}`;
+        const store = useGameStore.getState();
+        store.setFlag(key, (store.state?.flags[key] ?? 0) + 1);
+        store.discoverActivity(loc.id);
+      } else if (d > 32) {
+        this.insideAreas.delete(loc.id);
+      }
+    }
   }
 
   private updateAmbience(state: GameState): void {
@@ -395,6 +454,7 @@ export class Game {
         }
         this.enterInterior(String(target.data?.interior));
         store.discoverActivity(locId);
+        store.setFlag(`visit:${locId}`, (state.flags[`visit:${locId}`] ?? 0) + 1);
         return;
       }
       case 'exit':
@@ -592,6 +652,65 @@ export class Game {
       default:
         ui.toast('Nothing happens', 'info');
     }
+  }
+
+  /* ------------------------------------------------------------- combat */
+
+  /**
+   * Stages a fight in the world: both characters are placed facing each other
+   * and the camera swings side-on so the player can read the spacing.
+   */
+  beginCombat(npcId: string): void {
+    const agent = this.npcs.get(npcId);
+    this.setLockedTo(null);
+    this.player.setLocked(true);
+    if (!agent) return;
+
+    const dir = new THREE.Vector3(
+      agent.position.x - this.player.position.x,
+      0,
+      agent.position.z - this.player.position.z,
+    );
+    if (dir.lengthSq() < 0.01) dir.set(0, 0, 1);
+    dir.normalize();
+
+    // Stand them a fixed distance apart so the framing is consistent.
+    agent.position.set(
+      this.player.position.x + dir.x * 2.6,
+      0,
+      this.player.position.z + dir.z * 2.6,
+    );
+    agent.facing = Math.atan2(-dir.x, -dir.z);
+    agent.model.group.position.copy(agent.position);
+    agent.model.group.rotation.y = agent.facing;
+
+    this.player.facing = Math.atan2(dir.x, dir.z);
+    this.playerModel.group.rotation.y = this.player.facing;
+
+    this.combatFoe = npcId;
+    this.camera.yaw = this.player.facing + Math.PI / 2;
+    this.camera.pitch = 0.16;
+    this.camera.distance = 6.4;
+  }
+
+  /** Mirrors a combat action onto the 3D models. */
+  combatAnim(who: 'player' | 'foe', anim: AnimState): void {
+    if (who === 'player') {
+      this.playerModel.setState(anim);
+      return;
+    }
+    const agent = this.combatFoe ? this.npcs.get(this.combatFoe) : null;
+    agent?.model.setState(anim);
+  }
+
+  endCombat(): void {
+    this.combatFoe = null;
+    this.player.setLocked(false);
+    this.camera.distance = this.settings.gameplay.cameraDistance;
+  }
+
+  shakeCamera(amount: number): void {
+    this.camera.addShake(amount);
   }
 
   /** Triggers the bed flow from the confirmation dialog. */

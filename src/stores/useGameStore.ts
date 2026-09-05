@@ -2,6 +2,7 @@ import { create } from 'zustand';
 import { getCharacter } from '@/data/characters';
 import { getItem } from '@/data/items';
 import { QUEST_MAP } from '@/data/quests';
+import { baselineKey, rawCounter } from '@/game/systems/questSystem';
 import { createNewGame, type GameState, type PlayerPose } from '@/game/state';
 import { addItem, countItem, normalizeInventory, removeItem } from '@/game/systems/inventory';
 import { adjustNeeds, consumeItem, decayNeeds, sleep as sleepNeeds } from '@/game/systems/needs';
@@ -281,6 +282,7 @@ export const useGameStore = create<GameStore>((set, get) => ({
     if (!q) return;
     get().patch((s) => {
       s.quests = { ...s.quests, [id]: { status: 'active', progress: 0, startedDay: s.time.day } };
+      s.flags = { ...s.flags, [baselineKey(id)]: rawCounter(s, q) };
     });
     notify(`New task: ${q.title}`, 'good', '📋');
   },

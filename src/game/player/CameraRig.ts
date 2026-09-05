@@ -38,11 +38,11 @@ export class CameraRig {
   }
 
   /** Snap immediately, used after teleporting or entering a building. */
-  reset(target: THREE.Vector3, yaw: number): void {
+  reset(target: THREE.Vector3, yaw: number, pitch = 0.26): void {
     this.target.copy(target);
     this.currentTarget.copy(target);
     this.yaw = yaw;
-    this.pitch = 0.26;
+    this.pitch = pitch;
     this.initialised = false;
   }
 
@@ -51,7 +51,13 @@ export class CameraRig {
     this.shake = Math.min(1, this.shake + amount);
   }
 
-  update(dt: number, input: InputManager, collision: CollisionWorld | null, indoors: boolean): void {
+  update(
+    dt: number,
+    input: InputManager,
+    collision: CollisionWorld | null,
+    indoors: boolean,
+    room: { width: number; depth: number; height: number } | null = null,
+  ): void {
     const lookScale = 0.0032 * this.sensitivity;
     this.yaw -= input.look.x * lookScale;
     this.pitch += input.look.y * lookScale * (this.invertY ? -1 : 1);
@@ -59,7 +65,7 @@ export class CameraRig {
     input.clearLook();
 
     // Indoors the camera pulls in so it does not clip through the ceiling.
-    const wanted = indoors ? Math.min(this.distance, 4.6) : this.distance;
+    const wanted = indoors ? Math.min(this.distance, 4.2) : this.distance;
 
     const focus = this.target.clone().add(new THREE.Vector3(0, 1.35, 0));
     const smoothing = this.reducedMotion ? 1 : 1 - Math.exp(-dt * 9);
@@ -96,12 +102,24 @@ export class CameraRig {
     const desired = this.currentTarget.clone().addScaledVector(dir, this.smoothedDistance);
     desired.y = Math.max(desired.y, this.currentTarget.y - 1.2);
 
+    // Indoors the boom can slip out through a doorway, so the room itself is
+    // the final constraint.
+    const confine = (v: THREE.Vector3) => {
+      if (!room) return;
+      const m = 0.75;
+      v.x = Math.min(room.width - m, Math.max(-room.width + m, v.x));
+      v.z = Math.min(room.depth - m, Math.max(-room.depth + m, v.z));
+      v.y = Math.min(room.height - 0.4, Math.max(0.6, v.y));
+    };
+    confine(desired);
+
     if (!this.initialised) {
       this.current.copy(desired);
       this.initialised = true;
     } else {
       this.current.lerp(desired, this.reducedMotion ? 1 : 1 - Math.exp(-dt * 11));
     }
+    confine(this.current);
 
     this.camera.position.copy(this.current);
 
@@ -121,7 +139,8 @@ export class CameraRig {
     return new THREE.Vector3(-Math.sin(this.yaw), 0, -Math.cos(this.yaw)).normalize();
   }
 
+  /** Screen-right on the ground plane: forward crossed with up. */
   right(): THREE.Vector3 {
-    return new THREE.Vector3(-Math.cos(this.yaw), 0, Math.sin(this.yaw)).normalize();
+    return new THREE.Vector3(Math.cos(this.yaw), 0, -Math.sin(this.yaw)).normalize();
   }
 }
